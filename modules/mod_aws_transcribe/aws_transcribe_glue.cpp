@@ -152,18 +152,20 @@ public:
     {
  			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer %p stream got final response\n", this);
 			switch_core_session_t* psession = switch_core_session_locate(m_sessionId.c_str());
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer %p located session %s\n", this, m_sessionId.c_str());
 			if (psession) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer %p got stream session: %p\n", this, psession);
 				if (!outcome.IsSuccess()) {				
 					const TranscribeStreamingServiceError& err = outcome.GetError();
 					auto message = err.GetMessage();
 					auto exception = err.GetExceptionName();
-          cJSON* json = cJSON_CreateObject();
-          cJSON_AddStringToObject(json, "type", "error");
-          cJSON_AddStringToObject(json, "error", message.c_str());
-          char* jsonString = cJSON_PrintUnformatted(json);
-          m_responseHandler(psession, jsonString, m_bugname.c_str());
-          free(jsonString);
-          cJSON_Delete(json);
+          			cJSON* json = cJSON_CreateObject();
+          			cJSON_AddStringToObject(json, "type", "error");
+          			cJSON_AddStringToObject(json, "error", message.c_str());
+          			char* jsonString = cJSON_PrintUnformatted(json);
+          			m_responseHandler(psession, jsonString, m_bugname.c_str());
+          			free(jsonString);
+          			cJSON_Delete(json);
 					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer %p stream got error response %s : %s\n", this, message.c_str(), exception.c_str());
 				}
 
@@ -173,6 +175,11 @@ public:
 
 				switch_core_session_rwunlock(psession);
 			}
+
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "GStreamer %p session is closed/hungup. Need to unblock thread.\n", this);
+			// std::lock_guard<std::mutex> lk(m_mutex);
+			// m_finished = true;
+			// m_cond.notify_one();
     };
 
 		m_client->StartStreamTranscriptionAsync(m_request, OnStreamReady, OnResponseCallback, nullptr);
@@ -321,7 +328,7 @@ static void *SWITCH_THREAD_FUNC aws_transcribe_thread(switch_thread_t *thread, v
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "transcribe_thread: Error allocating streamer\n");
 		return nullptr;
 	}
-  if (!cb->vad) pStreamer->connect();
+  	if (!cb->vad) pStreamer->connect();
 	cb->streamer = pStreamer;
 	pStreamer->processData(); //blocks until done
 
@@ -519,9 +526,7 @@ extern "C" {
 				cb->thread = NULL;
 				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "aws_transcribe_session_stop: read thread completed %s, %d\n", bugname, retval);
 			}
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "aws_transcribe_session_stop: bugname - %s; going to kill callback\n", bugname);
 			killcb(cb);
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "aws_transcribe_session_stop: bugname - %s; killed callback\n", bugname);
 
 			switch_channel_set_private(channel, bugname, NULL);
 			if (!channelIsClosing) {
